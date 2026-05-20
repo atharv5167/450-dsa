@@ -7,11 +7,17 @@ import random
 from datetime import datetime, date
 from urllib.parse import quote_plus
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, session
+from datetime import datetime, timezone
+from urllib.parse import quote_plus
+from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, session, Response
+from pymongo import MongoClient
 from bson import ObjectId
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_bcrypt import Bcrypt
 from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
+from profile_validation import build_profile_updates
+from notes_export import build_topic_notes_markdown, topic_notes_filename
 
 load_dotenv()
 
@@ -110,6 +116,16 @@ def load_user(user_id):
         return UserWrapper(doc) if doc else None
     except Exception:
         return None
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+
+def ensure_utc_datetime(value):
+    if value and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
 
 def fetch_leetcode(username):
     try:
@@ -804,6 +820,24 @@ def topic(topic_id):
     
     return render_template('topic.html', topic=topic_doc, questions=questions, progress_dict=progress_dict)
 
+@app.route('/topic/<topic_id>/export-notes')
+@login_required
+def export_topic_notes(topic_id):
+    try:
+        topic_doc = db.topic.find_one({'_id': ObjectId(topic_id)})
+    except Exception:
+        return "Topic not found", 404
+    if not topic_doc:
+        return "Topic not found", 404
+
+    questions = list(db.question.find({'topic': topic_doc['_id']}))
+    markdown = build_topic_notes_markdown(topic_doc['name'], questions, current_user.progress)
+    response = Response(markdown, mimetype='text/markdown')
+    response.headers['Content-Disposition'] = (
+        f'attachment; filename={topic_notes_filename(topic_doc["name"])}'
+    )
+    return response
+
 @app.route('/update_question/<question_id>', methods=['POST'])
 @login_required
 def update_question(question_id):
@@ -823,7 +857,7 @@ def update_question(question_id):
     
     if 'done' in data:
         if data['done'] and not existing.get('done'):
-            update_fields[f'progress.{question_id}.timestamp'] = datetime.utcnow()
+            update_fields[f'progress.{question_id}.timestamp'] = utc_now()
         update_fields[f'progress.{question_id}.done'] = data['done']
     if 'bookmark' in data:
         update_fields[f'progress.{question_id}.bookmark'] = data['bookmark']
@@ -870,11 +904,12 @@ def mark_done(question_id):
 @login_required
 def sync_platforms():
     data = request.json
-    now = datetime.utcnow()
+    now = utc_now()
     user_id = current_user.id
     
     last_sync = current_user.last_sync
     if last_sync:
+        last_sync = ensure_utc_datetime(last_sync)
         diff = (now - last_sync).total_seconds()
         if diff < 600:
             rem = int(600 - diff)
@@ -967,11 +1002,9 @@ def edit_profile():
     data = request.get_json()
     if not data:
         return jsonify({"success": False, "error": "No data"}), 400
-    # Text fields
-    update_fields = {}
-    for field in ['name','bio','location','college','headline','linkedin_url','twitter_url','website_url','resume_url']:
-        if field in data:
-            update_fields[field] = data[field].strip()
+    update_fields, error = build_profile_updates(data)
+    if error:
+        return jsonify({"success": False, "error": error}), 400
     if update_fields:
         db.user.update_one({'_id': current_user.id}, {'$set': update_fields})
         current_user.reload()
@@ -1085,7 +1118,7 @@ def profile():
             
             dt = solved_items[q_id].get('timestamp')
             if not dt:
-                dt = datetime.utcnow()
+                dt = utc_now()
             d_str = dt.strftime('%Y-%m-%d')
             daily_counts[d_str] = daily_counts.get(d_str, 0) + 1
             
