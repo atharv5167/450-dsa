@@ -1,6 +1,10 @@
 import base64
 import json
+import os
 
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
 import requests
 from flask import Blueprint, jsonify, render_template, request
 from flask_login import current_user, login_required
@@ -174,15 +178,31 @@ def upload_photo():
     ext = file_obj.filename.rsplit(".", 1)[-1].lower()
     if ext not in allowed:
         return jsonify({"success": False, "error": "Invalid file type"}), 400
-    raw = file_obj.read()
-    if len(raw) > 2 * 1024 * 1024:
-        return jsonify({"success": False, "error": "File too large (max 2MB)"}), 400
-    encoded = base64.b64encode(raw).decode("utf-8")
-    mime = f"image/{ext}"
-    photo_url = f"data:{mime};base64,{encoded}"
-    db.user.update_one({"_id": current_user.id}, {"$set": {"profile_photo": photo_url}})
-    current_user.reload()
-    return jsonify({"success": True, "photo_url": photo_url})
+    
+    file_obj.seek(0, os.SEEK_END)
+    size = file_obj.tell()
+    if size > 2 * 1024 * 1024:
+        return jsonify({'success': False, 'error': 'File too large (max 2MB)'}), 400
+    file_obj.seek(0)
+    
+    try:
+        upload_result = cloudinary.uploader.upload(
+            file_obj,
+            folder="450dsa_profiles",
+            public_id=f"user_{current_user.id}",
+            overwrite=True,
+            transformation=[
+                {'width': 500, 'height': 500, 'crop': 'fill', 'gravity': 'face'}
+            ]
+        )
+        photo_url = upload_result.get('secure_url')
+        
+        db.user.update_one({'_id': current_user.id}, {'$set': {'profile_photo': photo_url}})
+        current_user.reload()
+        
+        return jsonify({'success': True, 'photo_url': photo_url})
+    except Exception as e:
+        return jsonify({'success': False, 'error': f"Cloudinary error: {str(e)}"}), 500
 
 
 @profile_bp.route("/profile")

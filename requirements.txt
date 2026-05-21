@@ -10,3 +10,4 @@ Flask-Bcrypt
 flask-bcrypt
 # pyjson5==1.6.2
 mongomock
+cloudinary
