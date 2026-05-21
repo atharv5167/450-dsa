@@ -33,7 +33,7 @@
 .meta-footer{font-size:0.72rem;color:var(--text-muted);display:flex;flex-direction:column;gap:4px;margin-top:8px}
 .meta-footer span{display:flex;justify-content:space-between}
 /* stat cards */
-.stat-row{display:grid;grid-template-columns:1fr 1fr 2fr;gap:12px}
+.stat-row{display:grid;grid-template-columns:1fr 1fr 1fr 2fr;gap:12px}
 .stat-card{background:var(--bg-card);border:1px solid var(--border-color);border-radius:14px;padding:16px}
 .stat-num{font-size:2.4rem;font-weight:900;line-height:1;margin-top:4px}
 .stat-lbl{font-size:0.75rem;color:var(--text-secondary);font-weight:600}
@@ -110,6 +110,9 @@
       <i class="bi bi-patch-check-fill" style="color:var(--success);font-size:.85rem"></i>
     </div>
     <button class="card-btn" onclick="showCodelioCard()">Get your Codolio Card</button>
+    <a class="card-btn" href="{{ url_for('export_csv') }}" style="background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-secondary)">
+      <i class="bi bi-download" style="margin-right:6px"></i> Export Progress CSV
+    </a>
     <div class="prof-bio">{{ user.bio or 'Software Engineer | Problem Solver | DSA Enthusiast' }}</div>
     <div class="social-row">
       {% if user.email %}<a href="mailto:{{ user.email }}" class="social-icon" title="Email"><i class="bi bi-envelope"></i></a>{% endif %}
@@ -196,6 +199,11 @@
     <div class="stat-card">
       <div class="stat-lbl">Total Active Days</div>
       <div class="stat-num">{{ total_active_days }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Current Streak</div>
+      <div class="stat-num">{{ current_streak }}d</div>
+      <div style="font-size:.72rem;color:var(--text-secondary);margin-top:6px">Best: {{ longest_streak }}d</div>
     </div>
     <div class="stat-card">
       <div class="hm-meta">
