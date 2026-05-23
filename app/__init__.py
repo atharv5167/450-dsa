@@ -7,8 +7,10 @@ from flask import Flask, session
 
 from app.admin import admin_bp
 from app.auth import auth_bp
+from app.faq import faq_bp
 from app.extensions import bcrypt, db, limiter, login_manager, mongo, oauth, cache
 from app.leaderboard import leaderboard_bp
+from app.public.routes import public_bp
 from app.profile import profile_bp
 from app.search import search_bp
 from app.tracker import tracker_bp
@@ -18,7 +20,7 @@ from app.utils import platform_color_filter, platform_name_filter
 def create_app():
     load_dotenv()
 
-    app = Flask(__name__, template_folder="../templates")
+    app = Flask(__name__, template_folder="../templates", static_folder="../static")
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "supersecretkey")
     app.config["MONGO_URI"] = os.environ.get("MONGO_URI", "mongodb://localhost:27017/450_dsa")
     app.config["CACHE_TYPE"] = "SimpleCache"
@@ -116,11 +118,13 @@ def create_app():
         return {"csrf_token": csrf_token}
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(faq_bp)  
     app.register_blueprint(tracker_bp)
     app.register_blueprint(profile_bp)
     app.register_blueprint(leaderboard_bp)
     app.register_blueprint(search_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(public_bp)
 
     @app.errorhandler(429)
     def ratelimit_handler(e):
@@ -134,5 +138,18 @@ def create_app():
         response.status_code = 429
         response.headers['Retry-After'] = str(retry_after)
         return response
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
+            "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            "img-src 'self' data: https:;"
+        )
+        return response
+
+
 
     return app
