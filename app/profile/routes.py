@@ -255,6 +255,11 @@ def sync_platforms():
             _mark("github", "failed", "Failed to fetch GitHub stats.")
         elif not github_data:
             _mark("github", "failed", "No data returned (username may be invalid or rate-limited).")
+        elif github_data.get("error"):
+            if github_data["error"] == "rate_limited":
+                _mark("github", "failed", "GitHub API rate limit reached. Please try again later.")
+            else:
+                _mark("github", "failed", "GitHub API returned an error. Please try again later.")
         else:
             _mark("github", "synced")
             for key, value in github_data.get("calendar", {}).items():

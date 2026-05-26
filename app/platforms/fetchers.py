@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import threading
 from datetime import datetime
@@ -190,34 +191,52 @@ def fetch_github(username):
             count = 0 if count_str == "No" else int(count_str)
             result_calendar[date_str] = count
 
-        response_issues = _get_http_session().get(
-            f"https://api.github.com/search/issues?q=type:issue+author:{username}",
-            timeout=5,
-        ).json()
-        response_prs = _get_http_session().get(
-            f"https://api.github.com/search/issues?q=type:pr+author:{username}",
-            timeout=5,
-        ).json()
-        response_merged = _get_http_session().get(
-            f"https://api.github.com/search/issues?q=type:pr+is:merged+author:{username}",
-            timeout=5,
-        ).json()
-        headers = {"Accept": "application/vnd.github.cloak-preview+json"}
-        response_commits = _get_http_session().get(
-            f"https://api.github.com/search/commits?q=author:{username}",
-            headers=headers,
-            timeout=5,
-        ).json()
+        auth_headers = {}
+        token = os.environ.get("GITHUB_TOKEN")
+        if token:
+            auth_headers["Authorization"] = f"token {token}"
 
-        stats = {
-            "issues": response_issues.get("total_count", 0),
-            "prs": response_prs.get("total_count", 0),
-            "merged_prs": response_merged.get("total_count", 0),
-            "commits": response_commits.get("total_count", 0),
-        }
+        def github_search_json(url, extra_headers=None):
+            headers = {**auth_headers, **(extra_headers or {})}
+            search_response = _get_http_session().get(url, headers=headers, timeout=5)
+            if search_response.status_code in (403, 429):
+                return "rate_limited", None
+            if search_response.status_code != 200:
+                return "api_error", None
+            return None, search_response.json()
+
+        searches = [
+            (
+                "issues",
+                f"https://api.github.com/search/issues?q=type:issue+author:{username}",
+                None,
+            ),
+            (
+                "prs",
+                f"https://api.github.com/search/issues?q=type:pr+author:{username}",
+                None,
+            ),
+            (
+                "merged_prs",
+                f"https://api.github.com/search/issues?q=type:pr+is:merged+author:{username}",
+                None,
+            ),
+            (
+                "commits",
+                f"https://api.github.com/search/commits?q=author:{username}",
+                {"Accept": "application/vnd.github.cloak-preview+json"},
+            ),
+        ]
+
+        stats = {}
+        for key, url, extra_headers in searches:
+            error, payload = github_search_json(url, extra_headers)
+            if error:
+                return {"error": error, "calendar": result_calendar, "stats": None}
+            stats[key] = payload.get("total_count", 0)
 
         return {"calendar": result_calendar, "stats": stats}
-    except Exception as exc:
+    except requests.exceptions.RequestException as exc:
         print("GH Error", exc)
         return {}
 
