@@ -34,10 +34,10 @@ class FakeDB:
 
 class FakeCache:
     def __init__(self):
-        self.clear_calls = 0
+        self.deleted_keys = []
 
-    def clear(self):
-        self.clear_calls += 1
+    def delete(self, key):
+        self.deleted_keys.append(key)
 
 
 def test_sync_user_platforms_respects_cooldown():
@@ -52,7 +52,7 @@ def test_sync_user_platforms_respects_cooldown():
     assert payload["success"] is False
     assert "Please wait" in payload["error"]
     assert db.user.updates == []
-    assert cache.clear_calls == 0
+    assert cache.deleted_keys == []
     assert user.reload_calls == 0
 
 
@@ -79,6 +79,7 @@ def test_sync_user_platforms_updates_totals_and_clears_cache(monkeypatch):
         "app.profile.sync_service.fetch_lc_badges",
         lambda username: [{"name": "100 Days"}],
     )
+    monkeypatch.setattr("app.profile.sync_service.invalidate_leaderboard_cache", lambda: None)
 
     payload, status_code = sync_user_platforms(
         user,
@@ -116,7 +117,7 @@ def test_sync_user_platforms_updates_totals_and_clears_cache(monkeypatch):
             },
         )
     ]
-    assert cache.clear_calls == 1
+    assert cache.deleted_keys == ["card_user-1"]
     assert user.reload_calls == 1
 
 

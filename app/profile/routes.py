@@ -5,14 +5,19 @@ from flask import Blueprint, current_app, jsonify, render_template, request, sen
 from flask_login import current_user, login_required
 
 from app.extensions import cache, db, limiter
-from app.profile.card_service import CACHE_TTL, card_cache, get_public_card_image
-from app.profile.sync_service import build_sync_platforms_response, sync_user_platforms
+from app.leaderboard.cache import invalidate_leaderboard_cache
+from app.profile.card_service import CACHE_TTL, get_public_card_image
+from app.profile.sync_service import (
+    build_sync_platforms_response,
+    clear_profile_caches,
+    sync_user_platforms,
+)
 from app.utils import json_error, json_success, utc_now, compute_user_platforms
 from profile_validation import build_profile_updates
 
 profile_bp = Blueprint("profile", __name__)
 
-__all__ = ["CACHE_TTL", "card_cache", "get_public_card_image"]
+__all__ = ["CACHE_TTL", "build_sync_platforms_response", "get_public_card_image"]
 
 
 @profile_bp.route("/sync_platforms", methods=["POST"])
@@ -160,6 +165,8 @@ def edit_profile():
     if update_fields:
         db.user.update_one({"_id": current_user.id}, {"$set": update_fields})
         current_user.reload()
+        invalidate_leaderboard_cache()
+        clear_profile_caches(cache, current_user.id)
     return json_success()
 
 
