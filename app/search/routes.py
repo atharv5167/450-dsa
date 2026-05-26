@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, render_template, request
+from flask_login import current_user
 
-from app.extensions import limiter
+from app.extensions import db, limiter
 from app.search.service import search_dsa_questions
 
 
@@ -10,7 +11,11 @@ search_bp = Blueprint("search", __name__)
 @search_bp.route("/search")
 def search():
     initial_query = request.args.get("q", "").strip()
-    return render_template("search.html", initial_query=initial_query)
+    try:
+        topics = list(db.topic.find({}, {"name": 1}).sort("position", 1))
+    except Exception:
+        topics = []
+    return render_template("search.html", initial_query=initial_query, topics=topics)
 
 
 @search_bp.route("/api/search_questions")
@@ -89,5 +94,12 @@ def api_search_questions():
     except ValueError:
         limit = 40
 
-    payload = search_dsa_questions(raw_query, limit=limit)
+    filters = {
+        "topic_id": request.args.get("topic_id", "").strip(),
+        "difficulty": request.args.get("difficulty", "").strip().lower(),
+        "platform": request.args.get("platform", "").strip().lower(),
+        "status": request.args.get("status", "").strip().lower(),
+    }
+    progress = current_user.progress if current_user.is_authenticated else {}
+    payload = search_dsa_questions(raw_query, limit=limit, filters=filters, progress=progress)
     return jsonify(payload)
